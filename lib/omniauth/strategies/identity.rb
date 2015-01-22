@@ -11,6 +11,7 @@ module OmniAuth
       option :on_registration, nil
       option :on_failed_registration, nil
       option :locate_conditions, lambda{|req| {model.auth_key => req['auth_key']} }
+      option :captcha, nil
 
       def request_phase
         if options[:on_login]
@@ -60,7 +61,18 @@ module OmniAuth
 
       def registration_phase
         attributes = (options[:fields] + [:password, :password_confirmation]).inject({}){|h,k| h[k] = request[k.to_s]; h}
-        @identity = model.create(attributes)
+
+        @identity = model.new(attributes)
+        @identity.valid?
+
+        if options[:captcha] == true and (request.env['recaptcha.valid'].nil? or request.env['recaptcha.valid'] == false)
+          @identity.errors["captcha"] = "does not match"
+        end
+
+        if @identity.errors.any? == false
+          @identity.save
+        end
+
         if @identity.persisted?
           env['PATH_INFO'] = callback_path
           callback_phase
